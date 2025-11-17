@@ -13,7 +13,7 @@ router.put('/products/:id', productValidationRules(), validate, ProductControlle
 router.delete('/products/:id', ProductController.destroy);
 
 
- 
+ router.get('/orders', OrderController.index); 
     router.post('/orders', OrderController.create);
 
 module.exports = router;
