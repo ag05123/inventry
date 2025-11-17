@@ -45,14 +45,18 @@
 
             <!-- Product Table & Action Buttons (Rendered by JS) -->
             <div id="productTableContainer" class="hidden">
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
                     <h2 class="text-2xl font-bold text-gray-800">Available Stock</h2>
-                    <div>
-                        <button id="openCreateProductModalBtn" class="py-2 px-4 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 transition duration-150 shadow-md mr-2">
+                    <div class="flex flex-wrap gap-2">
+                        <button id="openCreateProductModalBtn" class="py-2 px-4 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 transition duration-150 shadow-md">
                             + Create Product
                         </button>
                         <button id="openOrderModalBtn" class="py-2 px-4 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md">
                             Place New Order
+                        </button>
+                        <!-- NEW BUTTON FOR ORDER HISTORY -->
+                        <button id="openOrderHistoryModalBtn" class="py-2 px-4 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition duration-150 shadow-md">
+                            View Orders
                         </button>
                     </div>
                 </div>
@@ -169,6 +173,25 @@
             </div>
         </div>
     </div>
+    
+    <!-- Order History Modal -->
+    <div id="orderHistoryModal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl modal-content transform transition-transform duration-300 scale-95">
+            <div class="p-6">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                    <h3 class="text-2xl font-extrabold text-gray-700">Order History</h3>
+                    <button id="closeOrderHistoryModalBtn" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div id="orderHistoryContent" class="mt-4">
+                    <!-- Order data table will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         const API_BASE_URL = 'http://localhost:3000/api';
@@ -185,6 +208,8 @@
         // Modals & Buttons
         const orderModal = document.getElementById('orderModal');
         const productModal = document.getElementById('productModal');
+        const orderHistoryModal = document.getElementById('orderHistoryModal'); // NEW
+        const orderHistoryContent = document.getElementById('orderHistoryContent'); // NEW
         const productManagementForm = document.getElementById('productManagementForm');
         const productModalTitle = document.getElementById('productModalTitle');
         const submitProductBtn = document.getElementById('submitProductBtn');
@@ -244,21 +269,15 @@
 
         // --- Discount Calculation (Client-Side Simulation) ---
 
-        /**
-         * Simulates the server's discount logic to provide real-time feedback.
-         * Returns { baseTotal, discountAmount, finalAmount, discountRate }
-         */
         function calculateDiscount(baseTotal, uniqueItemCount) {
             let discountRate = 0;
-            const threshold10 = 0.10; // 10% for 3+ items
-            const threshold15 = 0.15; // 15% for > $500 total
+            const threshold10 = 0.10; 
+            const threshold15 = 0.15; 
 
-            // Rule 1: 3 or more unique items -> 10%
             if (uniqueItemCount >= 3) {
                 discountRate = Math.max(discountRate, threshold10);
             }
 
-            // Rule 2: Total order value > $500 -> 15%
             if (baseTotal > 500) {
                 discountRate = Math.max(discountRate, threshold15);
             }
@@ -280,7 +299,6 @@
             let baseTotal = 0;
             const uniqueProductIds = new Set();
 
-            // 1. Calculate Base Total and Unique Items
             quantityInputs.forEach(input => {
                 const quantity = parseInt(input.value) || 0;
                 const productId = parseInt(input.getAttribute('data-quantity-id'));
@@ -294,11 +312,9 @@
                 }
             });
 
-            // 2. Apply Discount Logic
             const uniqueItemCount = uniqueProductIds.size;
             const summary = calculateDiscount(baseTotal, uniqueItemCount);
 
-            // 3. Update DOM
             orderSubtotal.textContent = `$${summary.baseTotal.toFixed(2)}`;
             discountRateDisplay.textContent = `${summary.discountRate}%`;
             discountAmount.textContent = `-$${summary.discountAmount.toFixed(2)}`;
@@ -330,16 +346,14 @@
         }
 
         function renderOrderFormItems(products) {
-            // Filter out products with 0 stock for ordering
             const availableProducts = products.filter(p => p.stock_quantity > 0);
-
             const orderItemsList = document.getElementById('orderItemsList');
             orderItemsList.innerHTML = ''; 
             document.getElementById('submitOrderBtn').disabled = true;
 
             if (availableProducts.length === 0) {
                 orderItemsList.innerHTML = '<p class="text-center text-gray-500 py-4">No stock available for ordering.</p>';
-                updateOrderSummary(); // Reset summary
+                updateOrderSummary(); 
                 return;
             }
             document.getElementById('submitOrderBtn').disabled = false;
@@ -366,7 +380,64 @@
                 `;
                 orderItemsList.insertAdjacentHTML('beforeend', itemHtml);
             });
-            updateOrderSummary(); // Initial calculation
+            updateOrderSummary(); 
+        }
+        
+        // --- Order History Logic (NEW) ---
+        async function openOrderHistoryModal() {
+            toggleModal(orderHistoryModal, true);
+            orderHistoryContent.innerHTML = '<p class="text-center py-8 text-gray-500 flex items-center justify-center"><svg class="animate-spin h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Loading orders...</p>';
+
+            try {
+                // Assuming GET /api/orders returns all order records
+                const response = await axios.get(`${API_BASE_URL}/orders`);
+                const orders = response.data;
+
+                if (orders.length === 0) {
+                    orderHistoryContent.innerHTML = '<p class="text-center py-8 text-gray-500">No orders have been placed yet.</p>';
+                    return;
+                }
+
+                let tableHtml = `
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order No.</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                `;
+                
+                orders.forEach(order => {
+                    const statusColor = order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                    const date = new Date(order.createdAt).toLocaleDateString();
+
+                    tableHtml += `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order.order_number}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">$${parseFloat(order.total_amount).toFixed(2)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${order.status}</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">${date}</td>
+                        </tr>
+                    `;
+                });
+
+                tableHtml += `
+                        </tbody>
+                    </table>
+                `;
+                orderHistoryContent.innerHTML = tableHtml;
+
+            } catch (err) {
+                console.error('Order History Fetch Error:', err);
+                const message = err.request ? 'Network Error: Cannot reach the API server to fetch orders.' : 'Error fetching order data.';
+                orderHistoryContent.innerHTML = `<p class="text-center py-8 text-red-600">${message}</p>`;
+            }
         }
         
         // --- CRUD Handlers ---
@@ -377,11 +448,9 @@
             toggleModal(productModal, true);
             
             try {
-                // GET request to /products/:id
                 const response = await axios.get(`${API_BASE_URL}/products/${productId}`);
                 const product = response.data;
                 
-                // Populate fields
                 productIdField.value = product.id;
                 productName.value = product.name;
                 productSku.value = product.sku;
@@ -395,7 +464,7 @@
             }
         }
         
-        window.openEditProductModal = openEditProductModal; // Make available globally
+        window.openEditProductModal = openEditProductModal; 
 
         window.deleteProduct = async function(productId) {
             if (!confirm('Are you sure you want to delete this product?')) {
@@ -403,11 +472,9 @@
             }
 
             try {
-                // DELETE request to /products/:id
                 await axios.delete(`${API_BASE_URL}/products/${productId}`);
                 renderMessage('success', `Product ID ${productId} deleted successfully.`);
                 
-                // Refresh inventory data and table
                 await fetchProductsAndRender();
             } catch (err) {
                 const message = err.response && err.response.data.error ? err.response.data.error : 'Failed to delete product. It may be linked to existing orders.';
@@ -423,8 +490,12 @@
             toggleModal(productModal, true);
         });
 
+        document.getElementById('openOrderHistoryModalBtn').addEventListener('click', openOrderHistoryModal); // NEW BUTTON EVENT
+
         document.getElementById('closeProductModalBtn').addEventListener('click', () => toggleModal(productModal, false));
         document.getElementById('closeOrderModalBtn').addEventListener('click', () => toggleModal(orderModal, false));
+        document.getElementById('closeOrderHistoryModalBtn').addEventListener('click', () => toggleModal(orderHistoryModal, false)); // NEW CLOSE BUTTON
+        
         document.getElementById('openOrderModalBtn').addEventListener('click', () => {
             renderOrderFormItems(inventoryData);
             toggleModal(orderModal, true);
@@ -451,23 +522,20 @@
             try {
                 let response;
                 if (isUpdate) {
-                    // PUT request to /products/:id
                     response = await axios.put(`${API_BASE_URL}/products/${productId}`, productData);
                 } else {
-                    // POST request to /products
                     response = await axios.post(`${API_BASE_URL}/products`, productData);
                 }
 
                 renderMessage('success', `Product ${productData.name} ${isUpdate ? 'updated' : 'created'} successfully!`);
                 toggleModal(productModal, false);
-                await fetchProductsAndRender(); // Refresh data
+                await fetchProductsAndRender(); 
 
             } catch (err) {
                 console.error('Product Save Error:', err);
                 let message = 'An unexpected error occurred.';
                 
                 if (err.response && err.response.data) {
-                    // Handle validation errors (422) or SKU uniqueness (409)
                     if (err.response.data.errors) {
                         message = err.response.data.errors.map(e => Object.values(e).join(' ')).join('; ');
                     } else if (err.response.data.error) {
@@ -516,16 +584,14 @@
             submitButton.textContent = 'Processing Order...';
 
             try {
-                
                 const response = await axios.post(`${API_BASE_URL}/orders`, orderPayload);
                 const data = response.data; 
 
-                
                 const msg = `Order ${data.order.order_number} created successfully! Final amount: $${data.order.total_amount}. Discount: ${data.details.discount_rate}.`;
                 renderMessage('success', msg);
                 toggleModal(orderModal, false);
                 
-               
+                // FIX: Refresh the entire inventory data from the database
                 await fetchProductsAndRender(); 
                 
             } catch (err) {
@@ -541,7 +607,7 @@
                 submitButton.disabled = false;
                 submitButton.textContent = 'Send Place Order Request';
             }
-        }); 
+        });
 
 
         // --- Initialization ---
@@ -554,7 +620,7 @@
 
             try {
                 const response = await axios.get(`${API_BASE_URL}/products`);
-                inventoryData = response.data; // Update global data
+                inventoryData = response.data; 
                 renderProductTable(inventoryData);
                 tableContainer.classList.remove('hidden');
 
