@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management (CRUD + Ordering)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        /* Custom scrollbar and modal backdrop for aesthetics */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .modal-content {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-teal-600 mb-2 rounded-lg p-2 bg-white shadow-md">
+                Inventory & Order Management
+            </h1>
+            <p class="text-gray-500">Full CRUD capabilities for product management and order placement.</p>
+        </header>
+
+        <!-- Message container for status updates -->
+        <div id="message-container" class="space-y-4"></div>
+
+        <!-- Dynamic Content Area -->
+        <div id="content" class="bg-white p-6 rounded-xl shadow-xl border border-gray-100">
+            
+            <!-- Initial Loading Indicator -->
+            <div id="loading" class="text-center py-12 text-lg text-teal-500 font-semibold">
+                <svg class="animate-spin h-6 w-6 mr-3 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Fetching Inventory...
+            </div>
+
+            <!-- Product Table & Action Buttons (Rendered by JS) -->
+            <div id="productTableContainer" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Available Stock</h2>
+                    <div>
+                        <button id="openCreateProductModalBtn" class="py-2 px-4 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 transition duration-150 shadow-md mr-2">
+                            + Create Product
+                        </button>
+                        <button id="openOrderModalBtn" class="py-2 px-4 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md">
+                            Place New Order
+                        </button>
+                    </div>
+                </div>
+
+                <table id="productTable" class="min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden">
+                    <thead class="bg-teal-500 text-white">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider rounded-tl-lg">ID</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">SKU</th>
+                            <th class="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider">Price</th>
+                            <th class="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wider">Stock</th>
+                            <th class="px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider rounded-tr-lg">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Product rows go here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Error message area -->
+            <div id="error-alert" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <strong class="font-bold">API Error!</strong>
+                <span id="errorMessage" class="block sm:inline"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ---------------------------------------------------- -->
+    <!-- MODALS -->
+    <!-- ---------------------------------------------------- -->
+
+    <!-- Order Modal (For placing orders) -->
+    <div id="orderModal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg modal-content transform transition-transform duration-300 scale-95">
+            <div class="p-6">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                    <h3 class="text-2xl font-extrabold text-indigo-700">Create Customer Order</h3>
+                    <button id="closeOrderModalBtn" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <form id="orderForm" class="mt-4">
+                    <div id="orderItemsList" class="space-y-3 mb-6 max-h-80 overflow-y-auto pr-2">
+                        <!-- Product selection rows will be dynamically inserted here -->
+                    </div>
+                    
+                    <!-- Order Summary Box -->
+                    <div class="bg-gray-100 p-4 rounded-lg space-y-2 font-medium">
+                        <div class="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span id="orderSubtotal">$0.00</span>
+                        </div>
+                        <div class="flex justify-between text-green-700">
+                            <span>Discount Applied (<span id="discountRateDisplay">0%</span>):</span>
+                            <span id="discountAmount">$0.00</span>
+                        </div>
+                        <div class="flex justify-between pt-2 border-t border-gray-300 text-lg font-bold">
+                            <span>Total Payable:</span>
+                            <span id="orderTotal">$0.00</span>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="submitOrderBtn" class="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md mt-4">
+                        Send Place Order Request
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Management Modal (For Create/Update) -->
+    <div id="productModal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-backdrop transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md modal-content transform transition-transform duration-300 scale-95">
+            <div class="p-6">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+                    <h3 id="productModalTitle" class="text-2xl font-extrabold text-teal-600">Product Details</h3>
+                    <button id="closeProductModalBtn" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <form id="productManagementForm" class="mt-4 space-y-4">
+                    <input type="hidden" id="productIdField">
+                    
+                    <div>
+                        <label for="productName" class="block text-sm font-medium text-gray-700">Name</label>
+                        <input type="text" id="productName" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-teal-500 focus:border-teal-500">
+                    </div>
+                    
+                    <div>
+                        <label for="productSku" class="block text-sm font-medium text-gray-700">SKU (Unique Identifier)</label>
+                        <input type="text" id="productSku" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-teal-500 focus:border-teal-500">
+                    </div>
+
+                    <div>
+                        <label for="productPrice" class="block text-sm font-medium text-gray-700">Price ($)</label>
+                        <input type="number" step="0.01" id="productPrice" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-teal-500 focus:border-teal-500">
+                    </div>
+
+                    <div>
+                        <label for="productStock" class="block text-sm font-medium text-gray-700">Stock Quantity</label>
+                        <input type="number" id="productStock" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-teal-500 focus:border-teal-500">
+                    </div>
+                    
+                    <button type="submit" id="submitProductBtn" class="w-full py-3 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 transition duration-150 shadow-md">
+                        Save Product
+                    </button>
+                    <!-- Error message specific to product form -->
+                    <div id="productFormError" class="hidden text-sm text-red-600 p-2 bg-red-50 rounded-lg"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api';
+        let inventoryData = []; 
+
+        // DOM elements
+        const loadingDiv = document.getElementById('loading');
+        const errorAlert = document.getElementById('error-alert');
+        const errorMessageSpan = document.getElementById('errorMessage');
+        const tableContainer = document.getElementById('productTableContainer');
+        const productTableBody = document.getElementById('productTableBody');
+        const messageContainer = document.getElementById('message-container');
+        
+        // Modals & Buttons
+        const orderModal = document.getElementById('orderModal');
+        const productModal = document.getElementById('productModal');
+        const productManagementForm = document.getElementById('productManagementForm');
+        const productModalTitle = document.getElementById('productModalTitle');
+        const submitProductBtn = document.getElementById('submitProductBtn');
+        const productFormError = document.getElementById('productFormError');
+        
+        // Product form fields
+        const productIdField = document.getElementById('productIdField');
+        const productName = document.getElementById('productName');
+        const productSku = document.getElementById('productSku');
+        const productPrice = document.getElementById('productPrice');
+        const productStock = document.getElementById('productStock');
+
+        // Order Summary Elements
+        const orderSubtotal = document.getElementById('orderSubtotal');
+        const discountRateDisplay = document.getElementById('discountRateDisplay');
+        const discountAmount = document.getElementById('discountAmount');
+        const orderTotal = document.getElementById('orderTotal');
+
+        // --- Utility Functions ---
+
+        function renderMessage(type, message) {
+            const alertClass = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700';
+            messageContainer.innerHTML = `
+                <div class="p-4 rounded-lg border ${alertClass}" role="alert">
+                    <strong class="font-bold">${type.toUpperCase()}!</strong>
+                    <span class="block sm:inline ml-2">${message}</span>
+                </div>
+            `;
+            window.scrollTo(0, 0);
+        }
+        
+        function clearProductForm() {
+            productIdField.value = '';
+            productName.value = '';
+            productSku.value = '';
+            productPrice.value = '';
+            productStock.value = '';
+            productFormError.classList.add('hidden');
+            productFormError.textContent = '';
+        }
+
+        function toggleModal(modal, show) {
+            if (show) {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.querySelector('.modal-content').classList.remove('scale-95');
+                    modal.querySelector('.modal-content').classList.add('scale-100');
+                }, 10);
+            } else {
+                modal.querySelector('.modal-content').classList.add('scale-95');
+                modal.querySelector('.modal-content').classList.remove('scale-100');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        // --- Discount Calculation (Client-Side Simulation) ---
+
+        /**
+         * Simulates the server's discount logic to provide real-time feedback.
+         * Returns { baseTotal, discountAmount, finalAmount, discountRate }
+         */
+        function calculateDiscount(baseTotal, uniqueItemCount) {
+            let discountRate = 0;
+            const threshold10 = 0.10; // 10% for 3+ items
+            const threshold15 = 0.15; // 15% for > $500 total
+
+            // Rule 1: 3 or more unique items -> 10%
+            if (uniqueItemCount >= 3) {
+                discountRate = Math.max(discountRate, threshold10);
+            }
+
+            // Rule 2: Total order value > $500 -> 15%
+            if (baseTotal > 500) {
+                discountRate = Math.max(discountRate, threshold15);
+            }
+
+            const discountAmount = baseTotal * discountRate;
+            const finalAmount = baseTotal - discountAmount;
+
+            return {
+                baseTotal: baseTotal,
+                discountAmount: parseFloat(discountAmount.toFixed(2)),
+                finalAmount: parseFloat(finalAmount.toFixed(2)),
+                discountRate: discountRate * 100
+            };
+        }
+
+
+        function updateOrderSummary() {
+            const quantityInputs = document.querySelectorAll('#orderForm .quantity-input');
+            let baseTotal = 0;
+            const uniqueProductIds = new Set();
+
+            // 1. Calculate Base Total and Unique Items
+            quantityInputs.forEach(input => {
+                const quantity = parseInt(input.value) || 0;
+                const productId = parseInt(input.getAttribute('data-quantity-id'));
+
+                if (quantity > 0) {
+                    const product = inventoryData.find(p => p.id === productId);
+                    if (product) {
+                        baseTotal += parseFloat(product.price) * quantity;
+                        uniqueProductIds.add(productId);
+                    }
+                }
+            });
+
+            // 2. Apply Discount Logic
+            const uniqueItemCount = uniqueProductIds.size;
+            const summary = calculateDiscount(baseTotal, uniqueItemCount);
+
+            // 3. Update DOM
+            orderSubtotal.textContent = `$${summary.baseTotal.toFixed(2)}`;
+            discountRateDisplay.textContent = `${summary.discountRate}%`;
+            discountAmount.textContent = `-$${summary.discountAmount.toFixed(2)}`;
+            orderTotal.textContent = `$${summary.finalAmount.toFixed(2)}`;
+        }
+
+
+        // --- Render Functions ---
+
+        function renderProductTable(products) {
+            productTableBody.innerHTML = '';
+            products.forEach(product => {
+                const stockColor = product.stock_quantity < 10 ? 'text-red-600 font-bold' : 'text-gray-800';
+                const row = `
+                    <tr data-product-id="${product.id}" class="hover:bg-gray-50 transition duration-100">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${product.id}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${product.name}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${product.sku}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">$${parseFloat(product.price).toFixed(2)}</td>
+                        <td id="stock-display-${product.id}" class="px-4 py-3 whitespace-nowrap text-sm ${stockColor} text-right">${product.stock_quantity}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-center text-sm font-medium">
+                            <button onclick="openEditProductModal(${product.id})" class="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
+                            <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-900">Delete</button>
+                        </td>
+                    </tr>
+                `;
+                productTableBody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        function renderOrderFormItems(products) {
+            // Filter out products with 0 stock for ordering
+            const availableProducts = products.filter(p => p.stock_quantity > 0);
+
+            const orderItemsList = document.getElementById('orderItemsList');
+            orderItemsList.innerHTML = ''; 
+            document.getElementById('submitOrderBtn').disabled = true;
+
+            if (availableProducts.length === 0) {
+                orderItemsList.innerHTML = '<p class="text-center text-gray-500 py-4">No stock available for ordering.</p>';
+                updateOrderSummary(); // Reset summary
+                return;
+            }
+            document.getElementById('submitOrderBtn').disabled = false;
+
+            availableProducts.forEach(product => {
+                const itemHtml = `
+                    <div class="flex justify-between items-center p-2 rounded-lg bg-gray-50">
+                        <label class="text-sm font-medium text-gray-700 w-1/2">${product.name} <span class="text-xs text-gray-400">($${parseFloat(product.price).toFixed(2)})</span></label>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-gray-500">Stock: ${product.stock_quantity}</span>
+                            <input 
+                                type="number" 
+                                data-quantity-id="${product.id}"
+                                class="quantity-input w-20 p-2 border border-gray-300 rounded-md text-center"
+                                min="0" 
+                                max="${product.stock_quantity}" 
+                                value="0"
+                                onchange="updateOrderSummary()"
+                                onkeyup="updateOrderSummary()"
+                                title="Quantity to order"
+                            >
+                        </div>
+                    </div>
+                `;
+                orderItemsList.insertAdjacentHTML('beforeend', itemHtml);
+            });
+            updateOrderSummary(); // Initial calculation
+        }
+        
+        // --- CRUD Handlers ---
+
+        async function openEditProductModal(productId) {
+            clearProductForm();
+            productModalTitle.textContent = 'Edit Product';
+            toggleModal(productModal, true);
+            
+            try {
+                // GET request to /products/:id
+                const response = await axios.get(`${API_BASE_URL}/products/${productId}`);
+                const product = response.data;
+                
+                // Populate fields
+                productIdField.value = product.id;
+                productName.value = product.name;
+                productSku.value = product.sku;
+                productPrice.value = parseFloat(product.price).toFixed(2);
+                productStock.value = product.stock_quantity;
+
+            } catch (err) {
+                const message = err.response && err.response.data.error ? err.response.data.error : 'Failed to fetch product details.';
+                renderMessage('error', message);
+                toggleModal(productModal, false);
+            }
+        }
+        
+        window.openEditProductModal = openEditProductModal; // Make available globally
+
+        window.deleteProduct = async function(productId) {
+            if (!confirm('Are you sure you want to delete this product?')) {
+                return;
+            }
+
+            try {
+                // DELETE request to /products/:id
+                await axios.delete(`${API_BASE_URL}/products/${productId}`);
+                renderMessage('success', `Product ID ${productId} deleted successfully.`);
+                
+                // Refresh inventory data and table
+                await fetchProductsAndRender();
+            } catch (err) {
+                const message = err.response && err.response.data.error ? err.response.data.error : 'Failed to delete product. It may be linked to existing orders.';
+                renderMessage('error', message);
+            }
+        }
+        
+        // --- Event Listeners ---
+        
+        document.getElementById('openCreateProductModalBtn').addEventListener('click', () => {
+            clearProductForm();
+            productModalTitle.textContent = 'Create New Product';
+            toggleModal(productModal, true);
+        });
+
+        document.getElementById('closeProductModalBtn').addEventListener('click', () => toggleModal(productModal, false));
+        document.getElementById('closeOrderModalBtn').addEventListener('click', () => toggleModal(orderModal, false));
+        document.getElementById('openOrderModalBtn').addEventListener('click', () => {
+            renderOrderFormItems(inventoryData);
+            toggleModal(orderModal, true);
+        });
+
+        // Handle Create (POST) or Update (PUT) Submission
+        productManagementForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const isUpdate = !!productIdField.value;
+            const productId = productIdField.value;
+            
+            const productData = {
+                name: productName.value,
+                sku: productSku.value,
+                price: parseFloat(productPrice.value),
+                stock_quantity: parseInt(productStock.value)
+            };
+            
+            submitProductBtn.disabled = true;
+            submitProductBtn.textContent = isUpdate ? 'Updating...' : 'Creating...';
+            productFormError.classList.add('hidden');
+
+            try {
+                let response;
+                if (isUpdate) {
+                    // PUT request to /products/:id
+                    response = await axios.put(`${API_BASE_URL}/products/${productId}`, productData);
+                } else {
+                    // POST request to /products
+                    response = await axios.post(`${API_BASE_URL}/products`, productData);
+                }
+
+                renderMessage('success', `Product ${productData.name} ${isUpdate ? 'updated' : 'created'} successfully!`);
+                toggleModal(productModal, false);
+                await fetchProductsAndRender(); // Refresh data
+
+            } catch (err) {
+                console.error('Product Save Error:', err);
+                let message = 'An unexpected error occurred.';
+                
+                if (err.response && err.response.data) {
+                    // Handle validation errors (422) or SKU uniqueness (409)
+                    if (err.response.data.errors) {
+                        message = err.response.data.errors.map(e => Object.values(e).join(' ')).join('; ');
+                    } else if (err.response.data.error) {
+                        message = err.response.data.error;
+                    }
+                }
+                
+                productFormError.textContent = message;
+                productFormError.classList.remove('hidden');
+
+            } finally {
+                submitProductBtn.disabled = false;
+                submitProductBtn.textContent = 'Save Product';
+            }
+        });
+
+
+        // --- Order Submission Logic ---
+        
+        document.getElementById('orderForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const submitButton = document.getElementById('submitOrderBtn');
+            const quantityInputs = document.querySelectorAll('#orderForm .quantity-input');
+            const items = [];
+            
+            messageContainer.innerHTML = '';
+
+            quantityInputs.forEach(input => {
+                const quantity = parseInt(input.value);
+                const productId = parseInt(input.getAttribute('data-quantity-id'));
+                
+                if (quantity > 0) {
+                    items.push({ product_id: productId, quantity: quantity });
+                }
+            });
+
+            if (items.length === 0) {
+                renderMessage('error', 'Please select a quantity greater than zero for at least one item.');
+                return;
+            }
+
+            const orderPayload = { items: items };
+
+            submitButton.disabled = true;
+            submitButton.textContent = 'Processing Order...';
+
+            try {
+                
+                const response = await axios.post(`${API_BASE_URL}/orders`, orderPayload);
+                const data = response.data; 
+
+                
+                const msg = `Order ${data.order.order_number} created successfully! Final amount: $${data.order.total_amount}. Discount: ${data.details.discount_rate}.`;
+                renderMessage('success', msg);
+                toggleModal(orderModal, false);
+                
+               
+                await fetchProductsAndRender(); 
+                
+            } catch (err) {
+                let errorMsg = 'An unexpected error occurred.';
+                if (err.response && err.response.data && err.response.data.error) {
+                    errorMsg = err.response.data.error; 
+                } else if (err.request) {
+                    errorMsg = 'Network Error: Could not connect to the API.';
+                }
+
+                renderMessage('error', `Order failed: ${errorMsg}`);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Send Place Order Request';
+            }
+        }); 
+
+
+        // --- Initialization ---
+
+        async function fetchProductsAndRender() {
+            loadingDiv.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+            errorAlert.classList.add('hidden');
+            messageContainer.innerHTML = '';
+
+            try {
+                const response = await axios.get(`${API_BASE_URL}/products`);
+                inventoryData = response.data; // Update global data
+                renderProductTable(inventoryData);
+                tableContainer.classList.remove('hidden');
+
+            } catch (err) {
+                console.error('API Fetch Error:', err);
+                const message = err.request ? 'Network Error: Could not reach the API server. Is Node.js running?' : 'An unknown error occurred.';
+                errorMessageSpan.textContent = message;
+                errorAlert.classList.remove('hidden');
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchProductsAndRender);
+    </script>
+</body>
+</html>
