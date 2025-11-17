@@ -33,7 +33,18 @@ class OrderController {
             baseTotal: baseTotal
         };
     }
-
+     static async index(req, res) {
+        try {
+            
+            const orders = await Order.findAll({
+                order: [['createdAt', 'DESC']]
+            });
+            res.json(orders);
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+            res.status(500).json({ error: 'Failed to retrieve order history.' });
+        }
+    }
     
     static async create(req, res) {
         const { items } = req.body; 
@@ -87,7 +98,7 @@ class OrderController {
             
             const order = await Order.create({
                 total_amount: discountResult.finalAmount,
-                status: 'completed',  
+                status: 'pending',  
             }, { transaction: t });
 
         
